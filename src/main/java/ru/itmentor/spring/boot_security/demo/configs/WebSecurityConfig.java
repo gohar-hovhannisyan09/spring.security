@@ -8,13 +8,15 @@ import org.springframework.security.config.annotation.web.configuration.WebSecur
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.provisioning.InMemoryUserDetailsManager;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.provisioning.InMemoryUserDetailsManager;
+import org.springframework.security.core.authority.AuthorityUtils;
 
 @Configuration
 @EnableWebSecurity
 public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
+
     private final SuccessUserHandler successUserHandler;
 
     public WebSecurityConfig(SuccessUserHandler successUserHandler) {
@@ -25,32 +27,39 @@ public class WebSecurityConfig extends WebSecurityConfigurerAdapter {
     protected void configure(HttpSecurity http) throws Exception {
         http
                 .authorizeRequests()
-                .antMatchers("/", "/index").permitAll()
-                .anyRequest().authenticated()
+                .antMatchers("/", "/index").permitAll() // Доступно всем
+                .antMatchers("/admin/**").hasRole("ADMIN") // Доступно только для ADMIN
+                .antMatchers("/user/**").hasAnyRole("USER", "ADMIN") // Доступно для USER и ADMIN
+                .anyRequest().authenticated() // Все остальные запросы должны быть аутентифицированы
                 .and()
-                .formLogin().successHandler(successUserHandler)
+                .formLogin()
+                .loginPage("/login")
+                .successHandler(successUserHandler)
                 .permitAll()
                 .and()
                 .logout()
+                .logoutUrl("/logout")
+                .logoutSuccessUrl("/login?logout")
                 .permitAll();
     }
+
     @Bean
     public UserDetailsService userDetailsService() {
         UserDetails user = User.withUsername("user")
-                .password(passwordEncoder().encode("user"))  // применяем кодирование пароля
-                .roles("USER")
-                .build();
-        UserDetails admin = User.withUsername("admin")
-                .password(passwordEncoder().encode("admin"))  // применяем кодирование пароля
-                .roles("ADMIN")
+                .password(passwordEncoder().encode("user"))
+                .authorities(AuthorityUtils.createAuthorityList("ROLE_USER")) // Роли в виде списка
                 .build();
 
-        return new InMemoryUserDetailsManager(user, admin);  // создаем in-memory userDetailsManager с 2 пользователями
+        UserDetails admin = User.withUsername("admin")
+                .password(passwordEncoder().encode("admin"))
+                .authorities(AuthorityUtils.createAuthorityList("ROLE_ADMIN")) // Роли в виде списка
+                .build();
+
+        return new InMemoryUserDetailsManager(user, admin);
     }
 
-    // Определение PasswordEncoder
     @Bean
     public PasswordEncoder passwordEncoder() {
-        return new BCryptPasswordEncoder();  // используем BCrypt для кодирования паролей
+        return new BCryptPasswordEncoder();
     }
 }
